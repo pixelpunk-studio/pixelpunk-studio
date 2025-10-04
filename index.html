@@ -1,0 +1,1246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PixelPunk Studio | Modern Design & Branding</title>
+    <meta name="description" content="PixelPunk Studio is a modern design studio specializing in branding, video editing, and web design with a focus on clean, rounded aesthetics.">
+    <meta name="keywords" content="web design, video editing, branding, modern design, digital studio, pixelpunk">
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://example.com/">
+    <meta property="og:title" content="PixelPunk Studio | Modern Design & Branding">
+    <meta property="og:description" content="PixelPunk Studio specializes in branding, video editing, and web design with a focus on clean, rounded aesthetics.">
+    <meta property="og:image" content="https://images.pexels.com/photos/38544/imac-apple-mockup-app-38544.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1">
+
+    <!-- Structured Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "name": "PixelPunk Studio",
+      "description": "Modern design studio specializing in branding, video editing, and web design with a focus on clean, rounded aesthetics.",
+      "url": "https://your-domain.com",
+      "logo": "https://your-domain.com/logo.png",
+      "contactPoint": {
+        "@type": "ContactPoint",
+        "telephone": "+1-XXX-XXX-XXXX",
+        "contactType": "customer service",
+        "email": "hello@pixelpunk.studio"
+      },
+      "address": {
+        "@type": "PostalAddress",
+        "addressCountry": "US"
+      },
+      "sameAs": [
+        "https://instagram.com/yourhandle",
+        "https://youtube.com/yourchannel"
+      ],
+      "offers": {
+        "@type": "Offer",
+        "itemOffered": {
+          "@type": "Service",
+          "name": "Web Design",
+          "description": "Intuitive, beautiful, and responsive websites designed with a user-first approach."
+        }
+      }
+    }
+    </script>
+
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2220%22 fill=%22%23111%22></rect><text x=%2250%25%22 y=%2250%25%22 dominant-baseline=%22central%22 text-anchor=%22middle%22 font-family=%22Quicksand, sans-serif%22 font-size=%2260%22 font-weight=%22bold%22 fill=%22%23fff%22>PP</text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@600;700&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="index.css">
+    <script src="https://unpkg.com/react@18.2.0/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone@7.24.5/babel.min.js" crossorigin></script>
+    <script src="config/sensitive-data.js"></script>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="text/babel" data-presets="env,react">
+// @ts-nocheck
+
+// --- IndexedDB for File Storage ---
+const DB_NAME = SENSITIVE_CONFIG.database.name;
+const STORE_NAME = SENSITIVE_CONFIG.database.storeName;
+let db;
+
+const initDB = () => {
+    return new Promise((resolve, reject) => {
+        if (db) return resolve(db);
+
+        const request = indexedDB.open(DB_NAME, 1);
+
+        request.onupgradeneeded = (event) => {
+            const dbInstance = event.target.result;
+            if (!dbInstance.objectStoreNames.contains(STORE_NAME)) {
+                dbInstance.createObjectStore(STORE_NAME);
+            }
+        };
+
+        request.onsuccess = (event) => {
+            db = event.target.result;
+            resolve(db);
+        };
+
+        request.onerror = (event) => {
+            console.error("IndexedDB error:", event.target.errorCode);
+            reject(event.target.errorCode);
+        };
+    });
+};
+
+const getFileFromDB = async (key) => {
+    const db = await initDB();
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction([STORE_NAME], 'readonly');
+        const store = transaction.objectStore(STORE_NAME);
+        const request = store.get(key);
+
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+    });
+};
+
+
+// --- Secure Storage & Encryption ---
+const ENCRYPTION_SECRET = SENSITIVE_CONFIG.encryption.secret;
+const ENCRYPTED_STORAGE_FILENAME = SENSITIVE_CONFIG.encryption.storageFilename;
+
+const arrayBufferToBase64 = (buffer) => {
+    let binary = '';
+    const bytes = new Uint8Array(buffer);
+    const len = bytes.byteLength;
+    for (let i = 0; i < len; i++) {
+        binary += String.fromCharCode(bytes[i]);
+    }
+    return window.btoa(binary);
+};
+
+const base64ToArrayBuffer = (base64) => {
+    const binary_string = window.atob(base64);
+    const len = binary_string.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+        bytes[i] = binary_string.charCodeAt(i);
+    }
+    return bytes.buffer;
+};
+
+const getEncryptionKey = async () => {
+    const enc = new TextEncoder();
+    const keyMaterial = await window.crypto.subtle.importKey(
+        'raw',
+        enc.encode(ENCRYPTION_SECRET),
+        { name: 'PBKDF2' },
+        false,
+        ['deriveKey']
+    );
+    return window.crypto.subtle.deriveKey(
+        {
+            name: 'PBKDF2',
+            salt: enc.encode('some-salt'),
+            iterations: 100000,
+            hash: 'SHA-256',
+        },
+        keyMaterial,
+        { name: 'AES-GCM', length: 256 },
+        true,
+        ['encrypt', 'decrypt']
+    );
+};
+
+const encryptData = async (dataObject, key) => {
+    const iv = window.crypto.getRandomValues(new Uint8Array(12));
+    const encodedData = new TextEncoder().encode(JSON.stringify(dataObject));
+    const encryptedContent = await window.crypto.subtle.encrypt(
+        { name: 'AES-GCM', iv: iv },
+        key,
+        encodedData
+    );
+    const combined = new Uint8Array(iv.length + encryptedContent.byteLength);
+    combined.set(iv);
+    combined.set(new Uint8Array(encryptedContent), iv.length);
+    return arrayBufferToBase64(combined.buffer);
+};
+
+const decryptData = async (encryptedString, key) => {
+    const encryptedDataBuffer = base64ToArrayBuffer(encryptedString);
+    const iv = encryptedDataBuffer.slice(0, 12);
+    const data = encryptedDataBuffer.slice(12);
+    const decryptedContent = await window.crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv: iv },
+        key,
+        data
+    );
+    return new TextDecoder().decode(decryptedContent);
+};
+
+const secureLog = async (dataToLog) => {
+    try {
+        const key = await getEncryptionKey();
+        const existingEncryptedData = localStorage.getItem(ENCRYPTED_STORAGE_FILENAME);
+        let submissions = [];
+
+        if (existingEncryptedData) {
+            const decryptedString = await decryptData(existingEncryptedData, key);
+            submissions = JSON.parse(decryptedString);
+        }
+
+        submissions.push(dataToLog);
+
+        const newEncryptedData = await encryptData(submissions, key);
+        localStorage.setItem(ENCRYPTED_STORAGE_FILENAME, newEncryptedData);
+        console.log('Submission successfully encrypted and stored.');
+
+    } catch (error) {
+        console.error('Failed to securely log submission:', error);
+    }
+};
+
+
+// --- Data Management ---
+const initialContent = {
+    hero: {
+        title: "We are PixelPunk Studio.",
+        subtitle: "We craft beautiful, rounded, and modern digital experiences that feel like a smooth pebble in your hand. No hard edges, just pure, fluid design.",
+    },
+    services: [
+        { id: 1, title: "Web Design", description: "Intuitive, beautiful, and responsive websites designed with a user-first approach.", link: "" },
+        { id: 2, title: "Video Editing", description: "Engaging, story-driven video content that captures attention and delivers your message.", link: "" },
+        { id: 3, title: "Branding", description: "A complete brand identity package to make your business stand out from the crowd.", link: "" },
+    ],
+    portfolio: {
+        design: [
+            { id: 1, type: 'image', url: 'https://images.pexels.com/photos/38544/imac-apple-mockup-app-38544.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1', desc: 'Minimalist branding for a tech startup.', aspectRatio: '16:9', gridColumnSpan: 1, objectFit: 'cover' },
+            { id: 2, type: 'image', url: 'https://images.pexels.com/photos/196644/pexels-photo-196644.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1', desc: 'E-commerce UI/UX design.', aspectRatio: '16:9', gridColumnSpan: 1, objectFit: 'cover' },
+        ],
+        videos: [
+            { id: 1, type: 'video', url: 'https://cdn.pixabay.com/video/2020/09/14/50531-459253457_large.mp4', desc: 'Promotional video for a new product.', aspectRatio: '16:9', gridColumnSpan: 1, objectFit: 'cover' },
+        ]
+    },
+    about: {
+        title: "About PixelPunk Studio",
+        bio: "Founded on the principle of 'soft design,' we believe digital tools should be a joy to use. Our team of designers and developers are passionate about creating interfaces that are not only functional but also delightful. We've been turning sharp corners into smooth curves since 2020.",
+        team: [
+            { id: 1, name: "Bhavymor09", role: "Lead Designer", avatar: "https://www.gravatar.com/avatar/1?d=identicon", href: "" },
+            { id: 2, name: "Hetjagani09", role: "Lead Developer", avatar: "https://www.gravatar.com/avatar/2?d=identicon", href: "" },
+        ]
+    },
+    reviews: [
+        { id: 1, name: "Alex Johnson", rating: 5, message: "PixelPunk Studio transformed our online presence. Their attention to detail and modern design sense is unparalleled. Highly recommended!", avatar: "https://www.gravatar.com/avatar/3?d=identicon" },
+        { id: 2, name: "Samantha Lee", rating: 5, message: "The video editing was top-notch, delivering a final product that exceeded our expectations. The team was professional and easy to work with.", avatar: "https://www.gravatar.com/avatar/4?d=identicon" },
+    ],
+    contact: {
+        email: "hello@pixelpunk.studio",
+        whatsapp: "1234567890",
+    },
+    socials: {
+        instagram: "https://instagram.com",
+        youtube: "https://youtube.com",
+    },
+    pricing: {
+        plans: [
+            { id: 1, name: 'Basic', price: '99', details: '• For small projects\n• 3 Pages Website\n• Basic SEO', discount: '10%', link: "" },
+            { id: 2, name: 'Pro', price: '249', details: '• For growing businesses\n• 10 Pages Website\n• Advanced SEO & Analytics', discount: '15%', link: "" },
+        ],
+        services: [
+            { id: 1, name: 'Logo Design', price: '499', details: '• 3 Initial Concepts\n• Unlimited Revisions\n• Full Copyright Ownership', discount: '', link: "" },
+        ]
+    },
+    telegram: SENSITIVE_CONFIG.telegram
+};
+
+const loadContent = () => {
+    try {
+        const serializedContent = localStorage.getItem('pixelpunk_content');
+        if (serializedContent === null) {
+            return initialContent;
+        }
+        const storedContent = JSON.parse(serializedContent);
+        return { ...initialContent, ...storedContent };
+    } catch (e) {
+        console.error("Could not load content from localStorage", e);
+        return initialContent;
+    }
+};
+
+const saveContent = (content) => {
+    try {
+        const serializedContent = JSON.stringify(content);
+        localStorage.setItem('pixelpunk_content', serializedContent);
+    } catch (e) {
+        console.error("Could not save content to localStorage", e);
+    }
+};
+
+const escapeMarkdownV2 = (text) => {
+    return String(text).replace(/([_*\[\]()~`>#+\-=|{}.!])/g, '\\$1');
+};
+
+const sendTelegramMessage = async (message, botToken, chatId) => {
+    if (!botToken || !chatId) {
+        console.error("Telegram credentials are not configured.");
+        return;
+    }
+    const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
+
+    const payload = {
+        chat_id: chatId,
+        text: message,
+        parse_mode: 'MarkdownV2',
+    };
+
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        const data = await response.json();
+        if (!data.ok) {
+            console.error("Telegram API Error:", data.description);
+        }
+    } catch (error) {
+        console.error("Failed to send Telegram message:", error);
+    }
+};
+
+const useIntersectionObserver = (options) => {
+    const containerRef = React.useRef([]);
+    const [isVisible, setIsVisible] = React.useState([]);
+
+    React.useEffect(() => {
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('visible');
+                    observer.unobserve(entry.target);
+                }
+            });
+        }, options);
+
+        containerRef.current.forEach(el => {
+            if (el) observer.observe(el);
+        });
+
+        return () => {
+            if (containerRef.current) {
+                containerRef.current.forEach(el => {
+                    if (el) observer.unobserve(el);
+                });
+            }
+        };
+    }, [containerRef, options]);
+
+    return containerRef;
+};
+
+const smoothScrollTo = (id) => {
+    const element = document.getElementById(id);
+    if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+};
+
+const AnimatedElement = React.forwardRef(({ as: Component = 'div', children, className = '', ...props }, ref) => {
+    return <Component className={`animated-element ${className}`} ref={ref} {...props}>{children}</Component>;
+});
+
+const Header = () => (
+    <header className="header">
+        <div className="container">
+            <a href="#" className="logo" onClick={(e) => { e.preventDefault(); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>PixelPunk Studio</a>
+            <nav>
+                <a href="#services" onClick={(e) => { e.preventDefault(); smoothScrollTo('services'); }}>Services</a>
+                <a href="#pricing" onClick={(e) => { e.preventDefault(); smoothScrollTo('pricing'); }}>Pricing</a>
+                <a href="#portfolio" onClick={(e) => { e.preventDefault(); smoothScrollTo('portfolio'); }}>Portfolio</a>
+                <a href="#reviews" onClick={(e) => { e.preventDefault(); smoothScrollTo('reviews'); }}>Reviews</a>
+                <a href="#about" onClick={(e) => { e.preventDefault(); smoothScrollTo('about'); }}>About</a>
+                <a href="#contact" onClick={(e) => { e.preventDefault(); smoothScrollTo('contact'); }}>Contact</a>
+            </nav>
+        </div>
+    </header>
+);
+
+const Hero = ({ content, animatedRef }) => (
+    <section id="hero" className="section hero">
+        <div className="container">
+            <AnimatedElement ref={el => animatedRef.current.push(el)}>
+                <h1>{content.title}</h1>
+            </AnimatedElement>
+            <AnimatedElement ref={el => animatedRef.current.push(el)}>
+                <p className="subtitle">{content.subtitle}</p>
+            </AnimatedElement>
+            <AnimatedElement ref={el => animatedRef.current.push(el)}>
+                <button className="btn" onClick={() => smoothScrollTo('contact')}>Get in Touch</button>
+            </AnimatedElement>
+        </div>
+    </section>
+);
+
+const Highlights = ({ animatedRef }) => (
+    <section id="highlights" className="section highlights">
+        <div className="container">
+            <div className="highlight-grid">
+                <AnimatedElement ref={el => animatedRef.current.push(el)} className="highlight-card">
+                    <h3>Rounded Everything</h3>
+                    <p>From buttons to image borders, we enforce a strict no-sharp-edges policy for a friendlier UI.</p>
+                </AnimatedElement>
+                <AnimatedElement ref={el => animatedRef.current.push(el)} className="highlight-card">
+                    <h3>Smooth Animations</h3>
+                    <p>Elements gracefully fade and slide into view as you scroll, creating a dynamic experience.</p>
+                </AnimatedElement>
+                <AnimatedElement ref={el => animatedRef.current.push(el)} className="highlight-card">
+                    <h3>Monochrome Theme</h3>
+                    <p>A clean, white-dominant theme with charcoal accents ensures your content is the star.</p>
+                </AnimatedElement>
+            </div>
+        </div>
+    </section>
+);
+
+const Services = ({ content, animatedRef }) => (
+    <section id="services" className="section">
+        <div className="container">
+            <AnimatedElement ref={el => animatedRef.current.push(el)}>
+                <h2 className="section-title">Our Services</h2>
+                <p className="section-subtitle">What we do best.</p>
+            </AnimatedElement>
+            <div className="services-grid">
+                {content.map(service => (
+                    <AnimatedElement key={service.id} className="service-card" ref={el => animatedRef.current.push(el)}>
+                        <h3>{service.title}</h3>
+                        <p>{service.description}</p>
+                        {service.link ? (
+                            <a href={service.link} className="btn btn-pill">Learn More</a>
+                        ) : (
+                            <button className="btn btn-pill">Learn More</button>
+                        )}
+                    </AnimatedElement>
+                ))}
+            </div>
+        </div>
+    </section>
+);
+
+const Pricing = ({ content, animatedRef }) => (
+    <section id="pricing" className="section">
+        <div className="container">
+            <AnimatedElement ref={el => animatedRef.current.push(el)}>
+                <h2 className="section-title">Pricing Plans</h2>
+                <p className="section-subtitle">Choose a plan that works for you.</p>
+            </AnimatedElement>
+            <div className="pricing-grid">
+                {content.plans.map(plan => (
+                    <AnimatedElement key={plan.id} className="pricing-card" ref={el => animatedRef.current.push(el)}>
+                        {plan.discount && <span className="discount-badge">{plan.discount} OFF</span>}
+                        <h3>{plan.name}</h3>
+                        <p className="price">${plan.price}<span>/mo</span></p>
+                        <ul className="plan-details">
+                            {plan.details.split('\n').map((item, index) => item && <li key={index}>{item}</li>)}
+                        </ul>
+                        {plan.link ? (
+                            <a href={plan.link} className="btn">Choose Plan</a>
+                        ) : (
+                            <button className="btn">Choose Plan</button>
+                        )}
+                    </AnimatedElement>
+                ))}
+            </div>
+
+            <AnimatedElement style={{ marginTop: '4rem' }} ref={el => animatedRef.current.push(el)}>
+                <h2 className="section-title">Individual Services</h2>
+                <p className="section-subtitle">Or pick a service a la carte.</p>
+            </AnimatedElement>
+            <div className="pricing-grid">
+                {content.services.map(service => (
+                    <AnimatedElement key={service.id} className="pricing-card" ref={el => animatedRef.current.push(el)}>
+                        {service.discount && <span className="discount-badge">{service.discount} OFF</span>}
+                        <h3>{service.name}</h3>
+                        <p className="price">${service.price}</p>
+                        <ul className="plan-details">
+                            {service.details.split('\n').map((item, index) => item && <li key={index}>{item}</li>)}
+                        </ul>
+                        {service.link ? (
+                            <a href={service.link} className="btn">Get Started</a>
+                        ) : (
+                            <button className="btn">Get Started</button>
+                        )}
+                    </AnimatedElement>
+                ))}
+            </div>
+        </div>
+    </section>
+);
+
+const PortfolioCard = ({ item, animatedRef, onMediaSelect }) => {
+    const videoRef = React.useRef(null);
+    const [mediaSrc, setMediaSrc] = React.useState(null);
+    const [isLoading, setIsLoading] = React.useState(true);
+
+    React.useEffect(() => {
+        let objectUrl = null;
+        let isMounted = true;
+
+        const loadMedia = async () => {
+            if (isMounted) setIsLoading(true);
+            if (item.url && item.url.startsWith('upload_')) {
+                try {
+                    const file = await getFileFromDB(item.url);
+                    if (isMounted) {
+                        if (file) {
+                            objectUrl = URL.createObjectURL(file);
+                            setMediaSrc(objectUrl);
+                        } else {
+                            setMediaSrc('https://via.placeholder.com/600x400.png?text=Media+Not+Found');
+                        }
+                    }
+                } catch (error) {
+                    console.error("Error loading media from DB:", error);
+                    if (isMounted) setMediaSrc('https://via.placeholder.com/600x400.png?text=Load+Error');
+                }
+            } else {
+                if (isMounted) setMediaSrc(item.url);
+            }
+            if (isMounted) setIsLoading(false);
+        };
+
+        loadMedia();
+
+        return () => {
+            isMounted = false;
+            if (objectUrl) {
+                URL.revokeObjectURL(objectUrl);
+            }
+        };
+    }, [item.url]);
+
+    const handleMouseEnter = () => {
+        if (item.type === 'video' && videoRef.current) {
+            const playPromise = videoRef.current.play();
+            if (playPromise !== undefined) {
+                playPromise.catch(error => {});
+            }
+        }
+    };
+    
+    const handleMouseLeave = () => {
+        if (item.type === 'video' && videoRef.current) {
+            videoRef.current.pause();
+        }
+    };
+
+    const ratioClass = item.aspectRatio ? `ratio-${item.aspectRatio.replace(':', '-')}` : 'ratio-16-9';
+    const mediaStyle = { objectFit: item.objectFit || 'cover' };
+
+    return (
+        <AnimatedElement 
+            className={`portfolio-card ${ratioClass}`} 
+            style={{ gridColumn: `span ${item.gridColumnSpan || 1}` }}
+            ref={el => animatedRef.current.push(el)}
+            onMouseEnter={handleMouseEnter}
+            onMouseLeave={handleMouseLeave}
+            onClick={() => onMediaSelect(item)}
+        >
+            {isLoading ? (
+                <div>Loading...</div>
+            ) : item.type === 'image' ? (
+                <img src={mediaSrc} alt={item.desc || 'Portfolio image'} style={mediaStyle} />
+            ) : (
+                <video ref={videoRef} src={mediaSrc} muted loop playsInline style={mediaStyle}>
+                    Your browser does not support the video tag.
+                </video>
+            )}
+            <div className="portfolio-overlay">
+                <p>{item.desc}</p>
+            </div>
+        </AnimatedElement>
+    );
+};
+
+const Portfolio = ({ content, animatedRef, onMediaSelect }) => (
+    <section id="portfolio" className="section">
+        <div className="container">
+            <AnimatedElement ref={el => animatedRef.current.push(el)}>
+                <h2 className="section-title">Our Work</h2>
+                <p className="section-subtitle">A selection of projects we're proud of.</p>
+            </AnimatedElement>
+
+            <AnimatedElement ref={el => animatedRef.current.push(el)}>
+                <h3 className="portfolio-subheading">Graphic Design</h3>
+            </AnimatedElement>
+            <div className="portfolio-grid">
+                {content.design.map(item => <PortfolioCard key={item.id} item={item} animatedRef={animatedRef} onMediaSelect={onMediaSelect} />)}
+            </div>
+
+            <AnimatedElement ref={el => animatedRef.current.push(el)}>
+                <h3 className="portfolio-subheading">Video Production</h3>
+            </AnimatedElement>
+            <div className="portfolio-grid">
+                {content.videos.map(item => <PortfolioCard key={item.id} item={item} animatedRef={animatedRef} onMediaSelect={onMediaSelect} />)}
+            </div>
+        </div>
+    </section>
+);
+
+const Star = ({ filled, ...props }) => (
+    <svg {...props} fill={filled ? 'currentColor' : 'none'} stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
+        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path>
+    </svg>
+);
+
+const StarRating = ({ rating }) => {
+    const totalStars = 5;
+    return (
+        <div className="star-rating">
+            {[...Array(totalStars)].map((_, index) => (
+                <Star key={index} filled={index < rating} />
+            ))}
+        </div>
+    );
+};
+
+const Reviews = ({ content, animatedRef, onLeaveReviewClick }) => (
+    <section id="reviews" className="section">
+        <div className="container">
+            <AnimatedElement ref={el => animatedRef.current.push(el)}>
+                <h2 className="section-title">What Our Clients Say</h2>
+                <p className="section-subtitle">Real feedback from real people.</p>
+            </AnimatedElement>
+            <div className="reviews-grid">
+                {content.map(review => (
+                    <AnimatedElement key={review.id} className="review-card" ref={el => animatedRef.current.push(el)}>
+                        <StarRating rating={review.rating} />
+                        <p className="review-message">"{review.message}"</p>
+                        <div className="review-author">
+                            <img src={review.avatar} alt={review.name} className="review-avatar" />
+                            <span className="review-name">{review.name}</span>
+                        </div>
+                    </AnimatedElement>
+                ))}
+            </div>
+            <AnimatedElement ref={el => animatedRef.current.push(el)} style={{ textAlign: 'center', marginTop: '3rem' }}>
+                <button onClick={onLeaveReviewClick} className="btn">
+                    Leave a Review
+                </button>
+            </AnimatedElement>
+        </div>
+    </section>
+);
+
+const TeamMemberImage = ({ src, alt }) => {
+    const [imgSrc, setImgSrc] = React.useState('https://www.gravatar.com/avatar/?d=identicon');
+
+    React.useEffect(() => {
+        let objectUrl = null;
+        let isMounted = true;
+
+        const loadAvatar = async () => {
+            if (!src) return;
+            
+            if (src.startsWith('upload_')) {
+                try {
+                    const file = await getFileFromDB(src);
+                    if (isMounted) {
+                        if (file) {
+                            objectUrl = URL.createObjectURL(file);
+                            setImgSrc(objectUrl);
+                        } else {
+                            setImgSrc(`https://www.gravatar.com/avatar/${alt}?d=identicon`);
+                        }
+                    }
+                } catch (error) {
+                    console.error("Error loading avatar from DB:", error);
+                    if (isMounted) setImgSrc(`https://www.gravatar.com/avatar/${alt}?d=identicon`);
+                }
+            } else {
+                if (isMounted) setImgSrc(src);
+            }
+        };
+
+        loadAvatar();
+
+        return () => {
+            isMounted = false;
+            if (objectUrl) {
+                URL.revokeObjectURL(objectUrl);
+            }
+        };
+    }, [src, alt]);
+
+    return <img src={imgSrc} alt={alt} />;
+};
+
+const About = ({ content, animatedRef }) => (
+    <section id="about" className="section about">
+        <div className="container">
+            <AnimatedElement ref={el => animatedRef.current.push(el)}>
+                <h2 className="section-title">{content.title}</h2>
+            </AnimatedElement>
+            <AnimatedElement className="about-bio" ref={el => animatedRef.current.push(el)}>
+                <p>{content.bio}</p>
+            </AnimatedElement>
+            <div className="team-grid">
+                {content.team.map(member => {
+                    const Component = member.href ? 'a' : 'div';
+                    const props = member.href ? { href: member.href, target: '_blank', rel: 'noopener noreferrer' } : {};
+                    
+                    return (
+                        <AnimatedElement 
+                            as={Component}
+                            {...props}
+                            key={member.id} 
+                            className={`team-member-card ${member.href ? 'linked' : ''}`} 
+                            ref={el => animatedRef.current.push(el)}
+                        >
+                            <TeamMemberImage src={member.avatar} alt={member.name} />
+                            <h3>{member.name}</h3>
+                            <p>{member.role}</p>
+                        </AnimatedElement>
+                    );
+                })}
+            </div>
+        </div>
+    </section>
+);
+
+const Contact = ({ contact, telegram, animatedRef }) => {
+    const [formState, setFormState] = React.useState({ name: '', email: '', message: '' });
+    const [errors, setErrors] = React.useState({});
+    const [submitted, setSubmitted] = React.useState(false);
+
+    const validateForm = () => {
+        const newErrors = {};
+        if (!formState.name.trim()) newErrors.name = "Name is required.";
+        if (!formState.email.trim()) {
+            newErrors.email = "Email is required.";
+        } else if (!/\S+@\S+\.\S+/.test(formState.email)) {
+            newErrors.email = "Email is invalid.";
+        }
+        if (!formState.message.trim()) newErrors.message = "Message is required.";
+        return newErrors;
+    };
+
+    const handleChange = (e) => {
+        const { name, value } = e.target;
+        setFormState({ ...formState, [name]: value });
+        if (errors[name]) {
+            setErrors({ ...errors, [name]: null });
+        }
+    };
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        const validationErrors = validateForm();
+        if (Object.keys(validationErrors).length > 0) {
+            setErrors(validationErrors);
+            return;
+        }
+        
+        const now = new Date();
+        
+        await secureLog({
+            type: 'contact',
+            ...formState,
+            timestamp: now.toISOString(),
+            pageUrl: window.location.href,
+        });
+        
+        const timestamp = escapeMarkdownV2(now.toLocaleString('en-GB', { timeZone: 'UTC' }) + ' UTC');
+        const pageUrl = escapeMarkdownV2(window.location.href);
+        const name = escapeMarkdownV2(formState.name || 'Anonymous');
+        const email = escapeMarkdownV2(formState.email);
+        const messageText = escapeMarkdownV2(formState.message);
+        
+        const telegramMessage = `*New Contact Form Submission* 📩
+
+*Name:* ${name}
+*Email:* ${email}
+*Timestamp:* ${timestamp}
+*Page URL:* ${pageUrl}
+
+*Message:*
+\`\`\`
+${messageText}
+\`\`\`
+
+\\-\\-\\-
+*User Info:*
+Telegram ID: ${escapeMarkdownV2(telegram.chatId)}
+Language: en`;
+
+        sendTelegramMessage(telegramMessage, telegram.botToken, telegram.chatId);
+
+        setSubmitted(true);
+        setErrors({});
+        setFormState({ name: '', email: '', message: '' });
+        setTimeout(() => setSubmitted(false), 3000);
+    };
+
+    return (
+        <section id="contact" className="section">
+            <div className="container">
+                <AnimatedElement ref={el => animatedRef.current.push(el)}>
+                    <h2 className="section-title">Contact Us</h2>
+                    <p className="section-subtitle">Let's build something amazing together.</p>
+                </AnimatedElement>
+                <div className="contact-grid">
+                    <AnimatedElement className="contact-form-wrapper" ref={el => animatedRef.current.push(el)}>
+                        {submitted ? (
+                            <div className="form-success">
+                                <h3>Thank you!</h3>
+                                <p>Your message has been sent. We'll get back to you soon.</p>
+                            </div>
+                        ) : (
+                            <form className="contact-form" onSubmit={handleSubmit} noValidate>
+                                <input type="text" name="name" placeholder="Your Name" value={formState.name} onChange={handleChange} className={errors.name ? 'invalid' : ''} />
+                                {errors.name && <p className="form-error">{errors.name}</p>}
+                                
+                                <input type="email" name="email" placeholder="Your Email" value={formState.email} onChange={handleChange} className={errors.email ? 'invalid' : ''} />
+                                {errors.email && <p className="form-error">{errors.email}</p>}
+
+                                <textarea name="message" rows="5" placeholder="Your Message" value={formState.message} onChange={handleChange} className={errors.message ? 'invalid' : ''}></textarea>
+                                {errors.message && <p className="form-error">{errors.message}</p>}
+
+                                <button type="submit" className="btn" disabled={Object.values(formState).some(v => !v.trim()) || Object.values(errors).some(v => v)}>Send Message</button>
+                            </form>
+                        )}
+                    </AnimatedElement>
+                    <AnimatedElement className="contact-info-wrapper" ref={el => animatedRef.current.push(el)}>
+                         <a href={`mailto:${contact.email}`} className="btn contact-btn">
+                            Contact By Email
+                        </a>
+                        <a href={`https://wa.me/${contact.whatsapp}`} target="_blank" rel="noopener noreferrer" className="btn contact-btn">
+                            Contact By WhatsApp
+                        </a>
+                    </AnimatedElement>
+                </div>
+            </div>
+        </section>
+    );
+};
+
+const Footer = ({ socials }) => (
+    <footer className="footer">
+        <div className="container">
+            <p>&copy; {new Date().getFullYear()} PixelPunk Studio. All Rights Reserved.</p>
+            <div className="footer-links">
+                <a href={socials.instagram} target="_blank" rel="noopener noreferrer" aria-label="Instagram">
+                    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fillRule="evenodd" clipRule="evenodd">
+                        <path d="M12 0c-3.072 0-3.447.012-4.66.068-1.213.056-2.044.248-2.757.537-.713.29-1.32.69-1.927 1.298-.607.607-1.008 1.214-1.298 1.928-.29.713-.48 1.544-.537 2.757C.012 8.553 0 8.928 0 12s.012 3.447.068 4.66c.056 1.213.248 2.044.537 2.757.29.713.69 1.32 1.298 1.927.607.607 1.214 1.008 1.928 1.298.713.29 1.544.48 2.757.537C8.553 23.988 8.928 24 12 24s3.447-.012 4.66-.068c1.213-.056 2.044-.248 2.757-.537.713-.29 1.32-.69 1.927-1.298.607-.607 1.008-1.214 1.298-1.928.29-.713.48-1.544.537-2.757C23.988 15.447 24 15.072 24 12s-.012-3.447-.068-4.66c-.056-1.213-.248-2.044-.537-2.757-.29-.713-.69-1.32-1.298-1.927-.607-.607-1.214-1.008-1.928-1.298-.713-.29-1.544-.48-2.757-.537C15.447.012 15.072 0 12 0zm0 2.16c3.02 0 3.38.012 4.56.066 1.08.05 1.79.244 2.17.412.48.208.82.46 1.18.82.36.36.61.7.82 1.18.17.38.36.99.41 2.17.055 1.18.067 1.54.067 4.56s-.012 3.38-.067 4.56c-.05 1.08-.24 1.79-.41 2.17-.21.48-.46.82-.82 1.18-.36.36-.7.61-1.18.82-.38.17-.99.36-2.17.41-1.18.054-1.54.066-4.56.066-3.02 0-3.38-.012-4.56-.066-1.08-.05-1.79-.24-2.17-.41-.48-.21-.82-.46-1.18-.82-.36-.36-.61-.7-.82-1.18-.17-.38-.36-.99-.41-2.17-.054-1.18-.066-1.54-.066-4.56s.012-3.38.066-4.56c.05-1.08.24-1.79.41-2.17.21-.48.46.82.82-1.18.36-.36.7-.61 1.18-.82.38-.17.99-.36 2.17-.41C8.62 2.17 8.98 2.16 12 2.16zm0 5.48c-2.42 0-4.38 1.96-4.38 4.38s1.96 4.38 4.38 4.38 4.38-1.96 4.38-4.38-1.96-4.38-4.38-4.38zm0 7.22c-1.57 0-2.84-1.27-2.84-2.84s1.27-2.84 2.84-2.84 2.84 1.27 2.84 2.84-1.27 2.84-2.84 2.84zm6.36-7.72c-.6 0-1.08.48-1.08 1.08s.48 1.08 1.08 1.08 1.08-.48 1.08-1.08-.48-1.08-1.08-1.08z"/>
+                    </svg>
+                </a>
+                <a href={socials.youtube} target="_blank" rel="noopener noreferrer" aria-label="YouTube">
+                     <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fillRule="evenodd" clipRule="evenodd">
+                        <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                    </svg>
+                </a>
+            </div>
+        </div>
+    </footer>
+);
+
+const ReviewPopup = ({ isOpen, onClose, onSubmit }) => {
+    if (!isOpen) return null;
+
+    const [formState, setFormState] = React.useState({ name: '', message: '', rating: 0 });
+    const [errors, setErrors] = React.useState({});
+    const [hoverRating, setHoverRating] = React.useState(0);
+    const [submitted, setSubmitted] = React.useState(false);
+
+    const validateForm = () => {
+        const newErrors = {};
+        if (!formState.name.trim()) newErrors.name = "Name is required.";
+        if (!formState.message.trim()) newErrors.message = "Message is required.";
+        if (formState.rating === 0) newErrors.rating = "Please select a star rating.";
+        return newErrors;
+    };
+
+    const handleFormChange = (field, value) => {
+        setFormState(prev => ({ ...prev, [field]: value }));
+        if (errors[field]) {
+            setErrors(prev => ({ ...prev, [field]: null }));
+        }
+    };
+
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        const validationErrors = validateForm();
+        if (Object.keys(validationErrors).length > 0) {
+            setErrors(validationErrors);
+            return;
+        }
+        
+        onSubmit(formState);
+        setSubmitted(true);
+        setTimeout(() => {
+            onClose();
+        }, 1500);
+    };
+
+    const isFormInvalid = !formState.name.trim() || !formState.message.trim() || formState.rating === 0;
+
+    return (
+        <div className="popup-overlay" onClick={onClose}>
+            <div className="review-popup" onClick={(e) => e.stopPropagation()}>
+                <button className="close-popup-btn" onClick={onClose}>&times;</button>
+                {submitted ? (
+                     <div className="form-success">
+                        <h3>Thank You!</h3>
+                        <p>Your review has been submitted.</p>
+                    </div>
+                ) : (
+                    <>
+                    <h3>Leave a Review</h3>
+                    <form className="review-form" onSubmit={handleSubmit} noValidate>
+                        <div className="popup-star-rating">
+                            {[...Array(5)].map((_, index) => {
+                                const ratingValue = index + 1;
+                                return (
+                                    <Star 
+                                        key={ratingValue}
+                                        className={ratingValue <= (hoverRating || formState.rating) ? 'filled' : ''}
+                                        onClick={() => handleFormChange('rating', ratingValue)}
+                                        onMouseEnter={() => setHoverRating(ratingValue)}
+                                        onMouseLeave={() => setHoverRating(0)}
+                                    />
+                                );
+                            })}
+                        </div>
+                        {errors.rating && <p className="form-error" style={{textAlign: 'center'}}>{errors.rating}</p>}
+
+                        <input 
+                            type="text" 
+                            placeholder="Your Name" 
+                            value={formState.name} 
+                            onChange={(e) => handleFormChange('name', e.target.value)} 
+                            className={errors.name ? 'invalid' : ''}
+                        />
+                        {errors.name && <p className="form-error">{errors.name}</p>}
+
+                        <textarea 
+                            rows="4" 
+                            placeholder="Your experience..." 
+                            value={formState.message} 
+                            onChange={(e) => handleFormChange('message', e.target.value)}
+                            className={errors.message ? 'invalid' : ''}
+                        ></textarea>
+                        {errors.message && <p className="form-error">{errors.message}</p>}
+
+                        <button type="submit" className="btn" style={{width: '100%'}} disabled={isFormInvalid}>Submit Review</button>
+                    </form>
+                    </>
+                )}
+            </div>
+        </div>
+    );
+};
+
+const MediaPopup = ({ media, onClose }) => {
+    if (!media) return null;
+
+    const [mediaSrc, setMediaSrc] = React.useState(null);
+    const [isLoading, setIsLoading] = React.useState(true);
+
+    React.useEffect(() => {
+        const handleKeyDown = (event) => {
+            if (event.key === 'Escape') {
+                onClose();
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [onClose]);
+    
+    React.useEffect(() => {
+        let objectUrl = null;
+        let isMounted = true;
+
+        const loadMedia = async () => {
+            if (isMounted) setIsLoading(true);
+            if (!media.url) {
+                if (isMounted) {
+                    setMediaSrc(null);
+                    setIsLoading(false);
+                }
+                return;
+            }
+
+            if (media.url.startsWith('upload_')) {
+                try {
+                    const file = await getFileFromDB(media.url);
+                    if (isMounted) {
+                        if (file) {
+                            objectUrl = URL.createObjectURL(file);
+                            setMediaSrc(objectUrl);
+                        } else {
+                            setMediaSrc('https://via.placeholder.com/600x400.png?text=Media+Not+Found');
+                        }
+                    }
+                } catch (error) {
+                    console.error("Error loading media from DB:", error);
+                    if (isMounted) {
+                        setMediaSrc('https://via.placeholder.com/600x400.png?text=Load+Error');
+                    }
+                }
+            } else {
+                if (isMounted) setMediaSrc(media.url);
+            }
+            if (isMounted) setIsLoading(false);
+        };
+
+        loadMedia();
+
+        return () => {
+            isMounted = false;
+            if (objectUrl) {
+                URL.revokeObjectURL(objectUrl);
+            }
+        };
+    }, [media.url]);
+
+    return (
+        <div className="media-popup-overlay" onClick={onClose}>
+            <div className="media-popup-content" onClick={(e) => e.stopPropagation()}>
+                <button className="media-popup-close-btn" onClick={onClose}>&times;</button>
+                {isLoading ? (
+                    <div style={{color: 'white', padding: '2rem', fontFamily: 'Inter, sans-serif'}}>Loading media...</div>
+                ) : media.type === 'image' ? (
+                    <img src={mediaSrc} alt={media.desc || 'Portfolio image'} />
+                ) : (
+                    <video src={mediaSrc} controls autoPlay>
+                        Your browser does not support the video tag.
+                    </video>
+                )}
+            </div>
+        </div>
+    );
+};
+
+
+const Website = () => {
+    const [content, setContent] = React.useState(loadContent());
+    const [isReviewPopupOpen, setReviewPopupOpen] = React.useState(false);
+    const [selectedMedia, setSelectedMedia] = React.useState(null);
+
+    React.useEffect(() => {
+        saveContent(content);
+    }, [content]);
+    
+    React.useEffect(() => {
+        initDB();
+    }, []);
+
+    // Auto-refresh functionality when admin saves changes
+    React.useEffect(() => {
+        const handleStorageChange = (e) => {
+            if (e.key === 'pixelpunk_refresh_trigger' && e.newValue) {
+                try {
+                    const refreshData = JSON.parse(e.newValue);
+                    console.log('Content updated by admin:', refreshData);
+                    
+                    // Show a subtle notification
+                    const notification = document.createElement('div');
+                    notification.style.cssText = `
+                        position: fixed;
+                        top: 20px;
+                        right: 20px;
+                        background: #4CAF50;
+                        color: white;
+                        padding: 12px 20px;
+                        border-radius: 8px;
+                        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                        z-index: 10000;
+                        font-family: 'Inter', sans-serif;
+                        font-size: 14px;
+                        animation: slideIn 0.3s ease-out;
+                    `;
+                    notification.textContent = `Content updated by ${refreshData.user} - Refreshing...`;
+                    document.body.appendChild(notification);
+                    
+                    // Add CSS animation
+                    const style = document.createElement('style');
+                    style.textContent = `
+                        @keyframes slideIn {
+                            from { transform: translateX(100%); opacity: 0; }
+                            to { transform: translateX(0); opacity: 1; }
+                        }
+                    `;
+                    document.head.appendChild(style);
+                    
+                    // Refresh the page after a short delay
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1500);
+                    
+                } catch (error) {
+                    console.error('Error parsing refresh trigger:', error);
+                }
+            }
+        };
+
+        // Listen for localStorage changes
+        window.addEventListener('storage', handleStorageChange);
+        
+        // Also check for existing trigger on page load
+        const existingTrigger = localStorage.getItem('pixelpunk_refresh_trigger');
+        if (existingTrigger) {
+            try {
+                const refreshData = JSON.parse(existingTrigger);
+                console.log('Found existing refresh trigger:', refreshData);
+                // Small delay to ensure page is fully loaded
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1000);
+            } catch (error) {
+                console.error('Error parsing existing refresh trigger:', error);
+            }
+        }
+
+        // Polling mechanism as backup (checks every 5 seconds)
+        const pollInterval = setInterval(() => {
+            const trigger = localStorage.getItem('pixelpunk_refresh_trigger');
+            if (trigger) {
+                try {
+                    const refreshData = JSON.parse(trigger);
+                    console.log('Polling detected content update:', refreshData);
+                    
+                    // Show notification
+                    const notification = document.createElement('div');
+                    notification.style.cssText = `
+                        position: fixed;
+                        top: 20px;
+                        right: 20px;
+                        background: #2196F3;
+                        color: white;
+                        padding: 12px 20px;
+                        border-radius: 8px;
+                        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                        z-index: 10000;
+                        font-family: 'Inter', sans-serif;
+                        font-size: 14px;
+                        animation: slideIn 0.3s ease-out;
+                    `;
+                    notification.textContent = `Content updated by ${refreshData.user} - Refreshing...`;
+                    document.body.appendChild(notification);
+                    
+                    // Clear the trigger
+                    localStorage.removeItem('pixelpunk_refresh_trigger');
+                    
+                    // Refresh after delay
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1500);
+                    
+                } catch (error) {
+                    console.error('Error parsing refresh trigger in polling:', error);
+                }
+            }
+        }, 5000);
+
+        return () => {
+            window.removeEventListener('storage', handleStorageChange);
+            clearInterval(pollInterval);
+        };
+    }, []);
+
+    const animatedRef = useIntersectionObserver({ threshold: 0.1 });
+    
+    const handleOpenReviewPopup = () => setReviewPopupOpen(true);
+    const handleCloseReviewPopup = () => setReviewPopupOpen(false);
+    
+    const handleSubmitReview = async (reviewData) => {
+        const now = new Date();
+        const newReview = {
+            id: Date.now(),
+            ...reviewData,
+            avatar: `https://www.gravatar.com/avatar/${Date.now()}?d=identicon`
+        };
+        
+        await secureLog({
+            type: 'review',
+            ...reviewData,
+            timestamp: now.toISOString(),
+            pageUrl: window.location.href,
+        });
+        
+        const timestamp = escapeMarkdownV2(now.toLocaleString('en-GB', { timeZone: 'UTC' }) + ' UTC');
+        const pageUrl = escapeMarkdownV2(window.location.href);
+        const name = escapeMarkdownV2(reviewData.name || 'Anonymous');
+        const ratingStars = '⭐'.repeat(reviewData.rating) + '☆'.repeat(5 - reviewData.rating);
+        const ratingText = escapeMarkdownV2(`${reviewData.rating} / 5`);
+        const messageText = escapeMarkdownV2(reviewData.message);
+
+        const telegramMessage = `*New Review Submitted* ⭐
+
+*Name:* ${name}
+*Rating:* ${ratingText} \\(${ratingStars}\\)
+*Timestamp:* ${timestamp}
+*Page URL:* ${pageUrl}
+
+*Review:*
+\`\`\`
+${messageText}
+\`\`\`
+
+\\-\\-\\-
+*User Info:*
+Telegram ID: ${escapeMarkdownV2(content.telegram.chatId)}
+Language: en`;
+
+        sendTelegramMessage(telegramMessage, content.telegram.botToken, content.telegram.chatId);
+        
+        setContent(prevContent => ({
+            ...prevContent,
+            reviews: [...prevContent.reviews, newReview]
+        }));
+    };
+
+    const handleMediaSelect = (mediaItem) => {
+        setSelectedMedia(mediaItem);
+    };
+    const handleCloseMediaPopup = () => setSelectedMedia(null);
+
+    return (
+        <>
+            <Header />
+            <main>
+                <Hero content={content.hero} animatedRef={animatedRef} />
+                <Highlights animatedRef={animatedRef} />
+                <Services content={content.services} animatedRef={animatedRef} />
+                <Pricing content={content.pricing} animatedRef={animatedRef} />
+                <Portfolio content={content.portfolio} animatedRef={animatedRef} onMediaSelect={handleMediaSelect} />
+                <Reviews content={content.reviews} animatedRef={animatedRef} onLeaveReviewClick={handleOpenReviewPopup} />
+                <About content={content.about} animatedRef={animatedRef} />
+                <Contact contact={content.contact} telegram={content.telegram} animatedRef={animatedRef} />
+            </main>
+            <Footer socials={content.socials} />
+            <ReviewPopup 
+                isOpen={isReviewPopupOpen}
+                onClose={handleCloseReviewPopup}
+                onSubmit={handleSubmitReview}
+            />
+            <MediaPopup
+                media={selectedMedia}
+                onClose={handleCloseMediaPopup}
+            />
+        </>
+    );
+};
+
+const App = () => {
+    return <Website />;
+};
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
+    </script>
+<script type="module" src="/index.tsx"></script>
+</body>
+</html>

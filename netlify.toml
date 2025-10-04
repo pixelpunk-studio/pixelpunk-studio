@@ -1,0 +1,30 @@
+[build]
+  publish = "."
+  command = "echo 'Static site - no build required'"
+
+[[redirects]]
+  from = "/wxwee21c3c34f43fwe12"
+  to = "/wxwee21c3c34f43fwe12/"
+  status = 301
+
+[[redirects]]
+  from = "/wxwee21c3c34f43fwe12/"
+  to = "/wxwee21c3c34f43fwe12/index.html"
+  status = 200
+
+[[headers]]
+  for = "/config/*"
+  [headers.values]
+    X-Robots-Tag = "noindex, nofollow"
+
+[[headers]]
+  for = "/wxwee21c3c34f43fwe12/*"
+  [headers.values]
+    X-Robots-Tag = "noindex, nofollow"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"

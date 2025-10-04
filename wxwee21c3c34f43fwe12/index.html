@@ -1,0 +1,876 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel | PixelPunk Studio</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2220%22 fill=%22%23111%22></rect><text x=%2250%25%22 y=%2250%25%22 dominant-baseline=%22central%22 text-anchor=%22middle%22 font-family=%22Quicksand, sans-serif%22 font-size=%2260%22 font-weight=%22bold%22 fill=%22%23fff%22>PP</text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@600;700&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../index.css">
+    <script src="https://unpkg.com/react@18.2.0/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone@7.24.5/babel.min.js" crossorigin></script>
+    <script src="../config/sensitive-data.js"></script>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="text/babel" data-presets="env,react">
+// @ts-nocheck
+
+// --- IndexedDB for File Storage ---
+const DB_NAME = SENSITIVE_CONFIG.database.name;
+const STORE_NAME = SENSITIVE_CONFIG.database.storeName;
+let db;
+
+const initDB = () => {
+    return new Promise((resolve, reject) => {
+        if (db) return resolve(db);
+
+        const request = indexedDB.open(DB_NAME, 1);
+
+        request.onupgradeneeded = (event) => {
+            const dbInstance = event.target.result;
+            if (!dbInstance.objectStoreNames.contains(STORE_NAME)) {
+                dbInstance.createObjectStore(STORE_NAME);
+            }
+        };
+
+        request.onsuccess = (event) => {
+            db = event.target.result;
+            resolve(db);
+        };
+
+        request.onerror = (event) => {
+            console.error("IndexedDB error:", event.target.errorCode);
+            reject(event.target.errorCode);
+        };
+    });
+};
+
+const saveFileToDB = async (file) => {
+    const db = await initDB();
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction([STORE_NAME], 'readwrite');
+        const store = transaction.objectStore(STORE_NAME);
+        const key = `upload_${Date.now()}_${file.name}`;
+        const request = store.put(file, key);
+        
+        request.onsuccess = () => resolve(key);
+        request.onerror = () => reject(request.error);
+    });
+};
+
+const getFileFromDB = async (key) => {
+    const db = await initDB();
+    return new Promise((resolve, reject) => {
+        const transaction = db.transaction([STORE_NAME], 'readonly');
+        const store = transaction.objectStore(STORE_NAME);
+        const request = store.get(key);
+
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+    });
+};
+
+// --- Telegram Notifications ---
+const escapeMarkdownV2 = (text) => {
+    return String(text).replace(/([_*\[\]()~`>#+\-=|{}.!])/g, '\\$1');
+};
+
+const sendTelegramMessage = async (message, botToken, chatId) => {
+    if (!botToken || !chatId) {
+        console.error("Telegram credentials are not configured.");
+        return;
+    }
+    const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
+
+    const payload = {
+        chat_id: chatId,
+        text: message,
+        parse_mode: 'MarkdownV2',
+    };
+
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        const data = await response.json();
+        if (!data.ok) {
+            console.error("Telegram API Error:", data.description);
+        } else {
+            console.log("Telegram notification sent successfully.");
+        }
+    } catch (error) {
+        console.error("Failed to send Telegram message:", error);
+    }
+};
+
+
+// --- Data Management ---
+const initialContent = {
+    hero: {
+        title: "We are PixelPunk Studio.",
+        subtitle: "We craft beautiful, rounded, and modern digital experiences that feel like a smooth pebble in your hand. No hard edges, just pure, fluid design.",
+    },
+    services: [
+        { id: 1, title: "Web Design", description: "Intuitive, beautiful, and responsive websites designed with a user-first approach.", link: "" },
+        { id: 2, title: "Video Editing", description: "Engaging, story-driven video content that captures attention and delivers your message.", link: "" },
+        { id: 3, title: "Branding", description: "A complete brand identity package to make your business stand out from the crowd.", link: "" },
+    ],
+    portfolio: {
+        design: [
+            { id: 1, type: 'image', url: 'https://images.pexels.com/photos/38544/imac-apple-mockup-app-38544.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1', desc: 'Minimalist branding for a tech startup.', aspectRatio: '16:9', gridColumnSpan: 1, objectFit: 'cover' },
+        ],
+        videos: [
+            { id: 1, type: 'video', url: 'https://cdn.pixabay.com/video/2020/09/14/50531-459253457_large.mp4', desc: 'Promotional video for a new product.', aspectRatio: '16:9', gridColumnSpan: 1, objectFit: 'cover' },
+        ]
+    },
+    about: {
+        title: "About PixelPunk Studio",
+        bio: "Founded on the principle of 'soft design,' we believe digital tools should be a joy to use. Our team of designers and developers are passionate about creating interfaces that are not only functional but also delightful. We've been turning sharp corners into smooth curves since 2020.",
+        team: [
+            { id: 1, name: "Bhavymor09", role: "Lead Designer", avatar: "https://www.gravatar.com/avatar/1?d=identicon", href: "" },
+            { id: 2, name: "Hetjagani09", role: "Lead Developer", avatar: "https://www.gravatar.com/avatar/2?d=identicon", href: "" },
+        ]
+    },
+    reviews: [
+        { id: 1, name: "Alex Johnson", rating: 5, message: "PixelPunk Studio transformed our online presence. Their attention to detail and modern design sense is unparalleled. Highly recommended!", avatar: "https://www.gravatar.com/avatar/3?d=identicon" },
+    ],
+    contact: {
+        email: "hello@pixelpunk.studio",
+        whatsapp: "1234567890",
+    },
+    socials: {
+        instagram: "https://instagram.com",
+        youtube: "https://youtube.com",
+    },
+    pricing: {
+        plans: [
+            { id: 1, name: 'Basic', price: '99', details: '• For small projects\n• 3 Pages Website\n• Basic SEO', discount: '10%', link: "" },
+        ],
+        services: [
+            { id: 1, name: 'Logo Design', price: '499', details: '• 3 Initial Concepts\n• Unlimited Revisions\n• Full Copyright Ownership', discount: '', link: "" },
+        ]
+    },
+    telegram: SENSITIVE_CONFIG.telegram,
+    users: SENSITIVE_CONFIG.users
+};
+
+const loadContent = () => {
+    try {
+        const serializedContent = localStorage.getItem('pixelpunk_content');
+        if (serializedContent === null) {
+            return initialContent;
+        }
+        const storedContent = JSON.parse(serializedContent);
+        
+        const mergedContent = { 
+            ...initialContent, 
+            ...storedContent,
+            hero: { ...initialContent.hero, ...(storedContent.hero || {}) },
+            portfolio: {
+                ...initialContent.portfolio,
+                ...(storedContent.portfolio || {})
+            },
+            about: {
+                ...initialContent.about,
+                ...(storedContent.about || {})
+            },
+            pricing: {
+                ...initialContent.pricing,
+                ...(storedContent.pricing || {})
+            },
+            contact: {
+                ...initialContent.contact,
+                ...(storedContent.contact || {})
+            },
+            socials: {
+                ...initialContent.socials,
+                ...(storedContent.socials || {})
+            },
+             telegram: {
+                ...initialContent.telegram,
+                ...(storedContent.telegram || {})
+            },
+            users: storedContent.users || initialContent.users,
+        };
+        
+        mergedContent.portfolio.design = mergedContent.portfolio.design || [];
+        mergedContent.portfolio.videos = mergedContent.portfolio.videos || [];
+        mergedContent.about.team = mergedContent.about.team || [];
+        mergedContent.pricing.plans = mergedContent.pricing.plans || [];
+        mergedContent.pricing.services = mergedContent.pricing.services || [];
+        mergedContent.reviews = mergedContent.reviews || [];
+        mergedContent.services = mergedContent.services || [];
+        
+        return mergedContent;
+    } catch (e) {
+        console.error("Could not load content from localStorage, resetting to default.", e);
+        return initialContent;
+    }
+};
+
+const saveContent = (content) => {
+    try {
+        const serializedContent = JSON.stringify(content);
+        localStorage.setItem('pixelpunk_content', serializedContent);
+    } catch (e) {
+        console.error("Could not save content to localStorage", e);
+    }
+};
+
+const SESSION_KEY = 'pixelpunk_session';
+const SESSION_DURATION = 60 * 60 * 1000;
+
+const validateSession = () => {
+    try {
+        const serializedSession = sessionStorage.getItem(SESSION_KEY);
+        if (!serializedSession) return null;
+        const session = JSON.parse(serializedSession);
+        if (Date.now() - session.timestamp > SESSION_DURATION) {
+            sessionStorage.removeItem(SESSION_KEY);
+            return null;
+        }
+        return session;
+    } catch (e) {
+        sessionStorage.removeItem(SESSION_KEY);
+        return null;
+    }
+};
+
+const createSession = (user) => {
+    const session = {
+        user: { name: user.name, username: user.username, role: user.role },
+        timestamp: Date.now(),
+    };
+    try {
+        sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+        return session;
+    } catch (e) {
+        return null;
+    }
+};
+
+const clearSession = () => {
+    sessionStorage.removeItem(SESSION_KEY);
+};
+
+const Login = ({ setSession, users }) => {
+    const [username, setUsername] = React.useState('');
+    const [password, setPassword] = React.useState('');
+    const [error, setError] = React.useState('');
+
+    const handleLogin = async (e) => {
+        e.preventDefault();
+        try {
+            const user = users.find(u => u.username === username && u.passEncoded === btoa(password));
+            if (user) {
+                const content = loadContent();
+                const now = new Date();
+                const timestamp = escapeMarkdownV2(now.toLocaleString('en-GB', { timeZone: 'UTC' }) + ' UTC');
+                const usernameMd = escapeMarkdownV2(user.name || user.username);
+                const roleMd = escapeMarkdownV2(user.role);
+
+                const loginMessage = `*Admin Login Alert* 🧑‍💻
+
+*User:* ${usernameMd} \\(${roleMd}\\)
+*Time:* ${timestamp}
+
+Successful login to the PixelPunk Studio admin panel\\.`;
+                
+                sendTelegramMessage(loginMessage, content.telegram.botToken, content.telegram.chatId);
+
+                const newSession = createSession(user);
+                if (newSession) setSession(newSession);
+                else setError('An error occurred during login.');
+            } else {
+                setError('Invalid username or password.');
+            }
+        } catch (err) {
+            setError('An error occurred during login.');
+        }
+    };
+
+    return (
+        <div className="login-container">
+            <form className="login-form" onSubmit={handleLogin}>
+                <h2>Admin Panel Access</h2>
+                <input className="admin-input" type="text" placeholder="Username" value={username} onChange={(e) => setUsername(e.target.value)} required />
+                <input className="admin-input" type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+                {error && <p className="login-error">{error}</p>}
+                <button type="submit" className="btn">Login</button>
+            </form>
+        </div>
+    );
+};
+
+const PortfolioItemPreview = ({ url, type }) => {
+    const [mediaSrc, setMediaSrc] = React.useState(null);
+    const [isVideo, setIsVideo] = React.useState(type === 'video');
+
+    React.useEffect(() => {
+        let objectUrl = null;
+        const loadMedia = async () => {
+            if (url && url.startsWith('upload_')) {
+                const file = await getFileFromDB(url);
+                if (file) {
+                    objectUrl = URL.createObjectURL(file);
+                    setMediaSrc(objectUrl);
+                    // Reliably determine type from the file's MIME type
+                    setIsVideo(file.type.startsWith('video/'));
+                } else {
+                    setMediaSrc('https://via.placeholder.com/200x100.png?text=Not+Found');
+                    setIsVideo(false);
+                }
+            } else {
+                setMediaSrc(url);
+                setIsVideo(type === 'video');
+            }
+        };
+        loadMedia();
+        return () => {
+            if (objectUrl) URL.revokeObjectURL(objectUrl);
+        };
+    }, [url, type]);
+
+    if (!mediaSrc) return <p>Loading preview...</p>;
+
+    const style = { maxWidth: '200px', height: 'auto', borderRadius: 'var(--radius)', margin: '10px 0' };
+
+    return isVideo
+        ? <video src={mediaSrc} controls style={style} />
+        : <img src={mediaSrc} alt="Preview" style={style} />;
+};
+
+const AvatarPreview = ({ url }) => {
+    const [imgSrc, setImgSrc] = React.useState(null);
+
+    React.useEffect(() => {
+        let objectUrl = null;
+        const loadMedia = async () => {
+            if (url && url.startsWith('upload_')) {
+                const file = await getFileFromDB(url);
+                if (file) {
+                    objectUrl = URL.createObjectURL(file);
+                    setImgSrc(objectUrl);
+                } else {
+                    setImgSrc('https://www.gravatar.com/avatar/?d=identicon');
+                }
+            } else {
+                setImgSrc(url);
+            }
+        };
+        loadMedia();
+        return () => {
+            if (objectUrl) URL.revokeObjectURL(objectUrl);
+        };
+    }, [url]);
+
+    if (!imgSrc) return <p>Loading...</p>;
+
+    return <img src={imgSrc} alt="Avatar Preview" style={{ width: '80px', height: '80px', borderRadius: '50%', objectFit: 'cover', margin: '10px 0' }} />;
+};
+
+
+const AdminDashboard = ({ session, setSession }) => {
+    const [content, setContent] = React.useState(loadContent());
+    const [saveStatus, setSaveStatus] = React.useState('');
+    const [activeSection, setActiveSection] = React.useState('general');
+
+    const handleContentChange = (section, index, field, value) => {
+        setContent(prev => ({ ...prev, [section]: prev[section].map((item, i) => i === index ? { ...item, [field]: value } : item) }));
+    };
+
+    const handlePortfolioChange = (type, index, field, value) => {
+        setContent(prev => ({ ...prev, portfolio: { ...prev.portfolio, [type]: prev.portfolio[type].map((item, i) => i === index ? { ...item, [field]: value } : item) } }));
+    };
+    
+    const handlePricingChange = (type, index, field, value) => {
+        setContent(prev => ({ ...prev, pricing: { ...prev.pricing, [type]: prev.pricing[type].map((item, i) => i === index ? { ...item, [field]: value } : item) } }));
+    };
+    
+    const handleAboutChange = (index, field, value) => {
+        setContent(prev => ({ ...prev, about: { ...prev.about, team: prev.about.team.map((member, i) => i === index ? { ...member, [field]: value } : member) } }));
+    };
+    
+    const handleReviewChange = (index, field, value) => {
+        const val = field === 'rating' ? parseInt(value, 10) : value;
+        setContent(prev => ({ ...prev, reviews: prev.reviews.map((review, i) => i === index ? { ...review, [field]: val } : review) }));
+    };
+
+    const handleSimpleChange = (section, field, value) => {
+        setContent(prev => ({ ...prev, [section]: { ...prev[section], [field]: value } }));
+    };
+    
+    const handleTelegramChange = (field, value) => {
+        setContent(prev => ({...prev, telegram: { ...prev.telegram, [field]: value } }));
+    };
+
+    const handleAboutTextChange = (field, value) => {
+        setContent(prev => ({ ...prev, about: { ...prev.about, [field]: value } }));
+    };
+    
+    const handleSocialsChange = (platform, value) => {
+        setContent(prev => ({ ...prev, socials: { ...prev.socials, [platform]: value } }));
+    };
+    
+    const handleUserChange = (index, field, value) => {
+        setContent(prev => ({
+            ...prev,
+            users: prev.users.map((user, i) => {
+                if (i !== index) return user;
+                if (field === 'newPassword' && value) {
+                    return { ...user, passEncoded: btoa(value) };
+                }
+                if (field === 'newPassword') return user; // Don't clear password on empty input
+                return { ...user, [field]: value };
+            })
+        }));
+    };
+
+    const handleFileChange = async (type, index, file) => {
+        if (!file) return;
+        try {
+            const fileKey = await saveFileToDB(file);
+            setContent(prev => {
+                const newPortfolio = { ...prev.portfolio };
+                newPortfolio[type] = newPortfolio[type].map((item, i) => 
+                    i === index ? { ...item, url: fileKey, fileName: file.name } : item
+                );
+                return { ...prev, portfolio: newPortfolio };
+            });
+        } catch (error) {
+            console.error("Failed to save file:", error);
+            alert("Error: Could not save file. Check console for details.");
+        }
+    };
+    
+    const handleAvatarFileChange = async (index, file) => {
+        if (!file) return;
+        try {
+            const fileKey = await saveFileToDB(file);
+            setContent(prev => {
+                const newAbout = { ...prev.about };
+                newAbout.team = newAbout.team.map((member, i) => 
+                    i === index ? { ...member, avatar: fileKey, fileName: file.name } : member
+                );
+                return { ...prev, about: newAbout };
+            });
+        } catch (error) {
+            console.error("Failed to save avatar file:", error);
+            alert("Error: Could not save avatar. Check console for details.");
+        }
+    };
+
+    const handleSave = () => {
+        saveContent(content);
+
+        // Trigger auto-refresh for main site
+        const refreshEvent = new CustomEvent('contentUpdated', {
+            detail: {
+                timestamp: Date.now(),
+                section: activeSection,
+                user: session.user.name || session.user.username
+            }
+        });
+        
+        // Dispatch event to localStorage for cross-tab communication
+        localStorage.setItem('pixelpunk_refresh_trigger', JSON.stringify({
+            timestamp: Date.now(),
+            section: activeSection,
+            user: session.user.name || session.user.username
+        }));
+        
+        // Remove the trigger after a short delay to allow main site to pick it up
+        setTimeout(() => {
+            localStorage.removeItem('pixelpunk_refresh_trigger');
+        }, 1000);
+
+        const now = new Date();
+        const timestamp = escapeMarkdownV2(now.toLocaleString('en-GB', { timeZone: 'UTC' }) + ' UTC');
+        const username = escapeMarkdownV2(session.user.name || session.user.username);
+        const sectionName = escapeMarkdownV2(activeSection.charAt(0).toUpperCase() + activeSection.slice(1));
+
+        const saveMessage = `*Content Update Alert* 💾
+
+*User:* ${username}
+*Time:* ${timestamp}
+
+Changes have been saved in the *${sectionName}* section\\.`;
+        
+        sendTelegramMessage(saveMessage, content.telegram.botToken, content.telegram.chatId);
+
+        setSaveStatus('Changes saved successfully! Main site will refresh automatically.');
+        const btn = document.querySelector('.save-btn');
+        btn.classList.add('bounce');
+        setTimeout(() => {
+            setSaveStatus('');
+            btn.classList.remove('bounce');
+        }, 3000);
+    };
+    
+    const handleLogout = () => {
+        clearSession();
+        setSession(null);
+    };
+
+    const handleAddPortfolioItem = (type) => {
+        const newItem = {
+            id: Date.now(),
+            type: type === 'design' ? 'image' : 'video',
+            url: '', desc: 'New item description.',
+            aspectRatio: '16:9', gridColumnSpan: 1, objectFit: 'cover',
+            fileName: ''
+        };
+        setContent(prev => ({ ...prev, portfolio: { ...prev.portfolio, [type]: [...prev.portfolio[type], newItem] } }));
+    };
+
+    const handleDeletePortfolioItem = (type, id) => {
+        setContent(prev => ({ ...prev, portfolio: { ...prev.portfolio, [type]: prev.portfolio[type].filter(item => item.id !== id) } }));
+    };
+
+    const handleAddPricingItem = (type) => {
+        const newItem = { id: Date.now(), name: 'New Item', price: '0', details: '• Feature 1\n• Feature 2', discount: '', link: '' };
+        setContent(prev => ({ ...prev, pricing: { ...prev.pricing, [type]: [...prev.pricing[type], newItem] } }));
+    };
+
+    const handleDeletePricingItem = (type, id) => {
+        setContent(prev => ({ ...prev, pricing: { ...prev.pricing, [type]: prev.pricing[type].filter(item => item.id !== id) } }));
+    };
+    
+    const handleAddTeamMember = () => {
+        const newMember = { id: Date.now(), name: "New Member", role: "Role", avatar: "https://www.gravatar.com/avatar/?d=identicon", href: "", fileName: "" };
+        setContent(prev => ({ ...prev, about: { ...prev.about, team: [...prev.about.team, newMember] } }));
+    };
+
+    const handleDeleteTeamMember = (id) => {
+        setContent(prev => ({ ...prev, about: { ...prev.about, team: prev.about.team.filter(member => member.id !== id) } }));
+    };
+    
+    const handleAddReview = () => {
+        const newReview = { id: Date.now(), name: "New Client", rating: 5, message: "A wonderful experience!", avatar: "https://www.gravatar.com/avatar/?d=identicon" };
+        setContent(prev => ({ ...prev, reviews: [...prev.reviews, newReview] }));
+    };
+    
+    const handleDeleteReview = (id) => {
+        setContent(prev => ({ ...prev, reviews: prev.reviews.filter(review => review.id !== id) }));
+    };
+
+    const handleAddUser = () => {
+        const newPassword = "changeme";
+        const newUser = { id: Date.now(), name: 'New User', username: "newuser", passEncoded: btoa(newPassword), role: "editor" };
+        setContent(prev => ({...prev, users: [...prev.users, newUser]}));
+        alert(`New user "newuser" created with password "${newPassword}". Please change it immediately.`);
+    };
+
+    const handleDeleteUser = (id) => {
+        if (content.users.length <= 1) {
+            alert("You cannot delete the last user.");
+            return;
+        }
+        if (window.confirm("Are you sure you want to delete this user? This action cannot be undone.")) {
+            setContent(prev => ({...prev, users: prev.users.filter(user => user.id !== id)}));
+        }
+    };
+
+    const NavLink = ({ section, children }) => (
+        <a 
+            href="#" 
+            className={`admin-nav-link ${activeSection === section ? 'active' : ''}`}
+            onClick={(e) => { e.preventDefault(); setActiveSection(section); }}
+        >
+            {children}
+        </a>
+    );
+
+    return (
+        <div className="admin-layout">
+            <aside className="admin-sidebar">
+                <div className="admin-sidebar-header">PixelPunk</div>
+                <nav className="admin-nav">
+                    <NavLink section="general">General Settings</NavLink>
+                    <NavLink section="services">Services</NavLink>
+                    <NavLink section="portfolio">Portfolio</NavLink>
+                    <NavLink section="pricing">Pricing</NavLink>
+                    <NavLink section="about">About Us</NavLink>
+                    <NavLink section="reviews">Reviews</NavLink>
+                    {session.user.role === 'admin' && (
+                        <NavLink section="users">User Management</NavLink>
+                    )}
+                </nav>
+            </aside>
+            <div className="admin-main-content">
+                <header className="admin-header">
+                    <div className="admin-header-left">
+                        <h2>{activeSection.charAt(0).toUpperCase() + activeSection.slice(1)} Management</h2>
+                    </div>
+                    <div className="admin-header-right">
+                        <span>Welcome, {session.user.name || session.user.username} ({session.user.role})</span>
+                        <a href="../" target="_blank" className="btn btn-secondary">View Site</a>
+                        <button onClick={handleSave} className="btn save-btn">Save Changes</button>
+                        <button onClick={handleLogout} className="btn btn-secondary">Logout</button>
+                    </div>
+                </header>
+                <main className="admin-container">
+                    {saveStatus && <div className="save-notification">{saveStatus}</div>}
+
+                    {activeSection === 'general' && (
+                        <>
+                        {session.user.role === 'admin' && (
+                            <div className="admin-section">
+                                <h3>Telegram Bot Settings</h3>
+                                <p style={{marginTop: '-1rem', marginBottom: '1rem', fontSize: '0.9rem', color: '#555'}}>Update the credentials for receiving form submission notifications.</p>
+                                <label>Bot Token</label>
+                                <input className="admin-input" type="text" value={content.telegram.botToken} onChange={(e) => handleTelegramChange('botToken', e.target.value)} />
+                                <label>Chat ID</label>
+                                <input className="admin-input" type="text" value={content.telegram.chatId} onChange={(e) => handleTelegramChange('chatId', e.target.value)} />
+                            </div>
+                        )}
+                        
+                        <div className="admin-section">
+                            <h3>Contact & Socials</h3>
+                            <label>Contact Email</label>
+                            <input className="admin-input" type="text" value={content.contact.email} onChange={(e) => handleSimpleChange('contact', 'email', e.target.value)} />
+                            <label>WhatsApp Number</label>
+                            <input className="admin-input" type="text" value={content.contact.whatsapp} onChange={(e) => handleSimpleChange('contact', 'whatsapp', e.target.value)} />
+                            <label>Instagram URL</label>
+                            <input className="admin-input" type="text" value={content.socials.instagram} onChange={(e) => handleSocialsChange('instagram', e.target.value)} />
+                            <label>YouTube URL</label>
+                            <input className="admin-input" type="text" value={content.socials.youtube} onChange={(e) => handleSocialsChange('youtube', e.target.value)} />
+                        </div>
+                        </>
+                    )}
+                    
+                    {activeSection === 'users' && session.user.role === 'admin' && (
+                        <div className="admin-section">
+                            <h3>User Management</h3>
+                             {content.users.map((user, index) => (
+                                <div key={user.id} className="admin-card">
+                                    <button className="delete-btn" onClick={() => handleDeleteUser(user.id)}>×</button>
+                                    <label>Full Name</label>
+                                    <input className="admin-input" type="text" value={user.name || ''} onChange={(e) => handleUserChange(index, 'name', e.target.value)} />
+                                    <label>Username</label>
+                                    <input className="admin-input" type="text" value={user.username} onChange={(e) => handleUserChange(index, 'username', e.target.value)} />
+                                    <label>Role</label>
+                                    <select className="admin-select" value={user.role} onChange={(e) => handleUserChange(index, 'role', e.target.value)}>
+                                        <option value="admin">Admin</option>
+                                        <option value="editor">Editor</option>
+                                    </select>
+                                    <label>New Password (leave blank to keep current)</label>
+                                    <input className="admin-input" type="password" placeholder="••••••••" onChange={(e) => handleUserChange(index, 'newPassword', e.target.value)} />
+                                </div>
+                            ))}
+                            <button className="btn admin-add-btn" onClick={handleAddUser}>Add New User</button>
+                        </div>
+                    )}
+
+
+                    {activeSection === 'about' && (
+                        <div className="admin-section">
+                            <h3>About Us Page</h3>
+                            <label>Section Title</label>
+                            <input className="admin-input" type="text" value={content.about.title} onChange={(e) => handleAboutTextChange('title', e.target.value)} />
+                            <label>Biography</label>
+                            <textarea className="admin-textarea" value={content.about.bio} onChange={(e) => handleAboutTextChange('bio', e.target.value)}></textarea>
+                            
+                            <h4 style={{ marginTop: '2rem', marginBottom: '1rem' }}>Team Members</h4>
+                            {content.about.team.map((member, index) => (
+                                <div key={member.id} className="admin-card">
+                                    <button className="delete-btn" onClick={() => handleDeleteTeamMember(member.id)}>×</button>
+                                    <label>Member Name</label>
+                                    <input className="admin-input" type="text" value={member.name} onChange={(e) => handleAboutChange(index, 'name', e.target.value)} />
+                                    <label>Role</label>
+                                    <input className="admin-input" type="text" value={member.role} onChange={(e) => handleAboutChange(index, 'role', e.target.value)} />
+                                    <label>Avatar</label>
+                                    <AvatarPreview url={member.avatar} />
+                                    <div className="file-upload-wrapper">
+                                        <label htmlFor={`avatar-upload-${member.id}`} className="file-upload-btn">Upload Avatar</label>
+                                        <input id={`avatar-upload-${member.id}`} type="file" accept="image/*" onChange={(e) => handleAvatarFileChange(index, e.target.files[0])} />
+                                        <span className="file-name">{member.fileName || ''}</span>
+                                    </div>
+                                    <label>Avatar URL (or use upload)</label>
+                                    <input className="admin-input" type="text" value={member.avatar} onChange={(e) => handleAboutChange(index, 'avatar', e.target.value)} />
+                                    <label>Profile Link (optional)</label>
+                                    <input className="admin-input" type="text" value={member.href || ''} placeholder="e.g., https://linkedin.com/in/..." onChange={(e) => handleAboutChange(index, 'href', e.target.value)} />
+                                </div>
+                            ))}
+                            <button className="btn admin-add-btn" onClick={handleAddTeamMember}>Add Team Member</button>
+                        </div>
+                    )}
+                    
+                    {activeSection === 'reviews' && (
+                        <div className="admin-section">
+                            <h3>Customer Reviews</h3>
+                            {content.reviews.map((review, index) => (
+                                <div key={review.id} className="admin-card">
+                                    <button className="delete-btn" onClick={() => handleDeleteReview(review.id)}>×</button>
+                                    <label>Client Name</label>
+                                    <input className="admin-input" type="text" value={review.name} onChange={(e) => handleReviewChange(index, 'name', e.target.value)} />
+                                    <label>Rating (1-5)</label>
+                                    <select className="admin-select" value={review.rating} onChange={(e) => handleReviewChange(index, 'rating', e.target.value)}>
+                                        {[1,2,3,4,5].map(r => <option key={r} value={r}>{r} Star{r>1 && 's'}</option>)}
+                                    </select>
+                                    <label>Review Message</label>
+                                    <textarea className="admin-textarea" rows="3" value={review.message} onChange={(e) => handleReviewChange(index, 'message', e.target.value)}></textarea>
+                                     <label>Avatar URL</label>
+                                    <input className="admin-input" type="text" value={review.avatar} onChange={(e) => handleReviewChange(index, 'avatar', e.target.value)} />
+                                </div>
+                            ))}
+                             <button className="btn admin-add-btn" onClick={handleAddReview}>Add Review</button>
+                        </div>
+                    )}
+
+                    {activeSection === 'services' && (
+                        <div className="admin-section">
+                            <h3>Services</h3>
+                            {content.services.map((service, index) => (
+                                <div key={service.id} className="admin-card">
+                                    <label>Service Title</label>
+                                    <input className="admin-input" type="text" value={service.title} onChange={(e) => handleContentChange('services', index, 'title', e.target.value)} />
+                                    <label>Service Description</label>
+                                    <textarea className="admin-textarea" value={service.description} onChange={(e) => handleContentChange('services', index, 'description', e.target.value)}></textarea>
+                                    <label>Link URL (optional)</label>
+                                    <input className="admin-input" type="text" value={service.link || ''} onChange={(e) => handleContentChange('services', index, 'link', e.target.value)} />
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                    
+                    {activeSection === 'portfolio' && (
+                        <div className="admin-section">
+                            <h3>Portfolio Management</h3>
+                            
+                            <div style={{ border: '1px solid #eee', padding: '1.5rem', borderRadius: 'var(--radius)', marginBottom: '1.5rem' }}>
+                                <h4>Graphics</h4>
+                                {content.portfolio.design.map((item, index) => (
+                                    <div key={item.id} className="admin-card">
+                                        <button className="delete-btn" onClick={() => handleDeletePortfolioItem('design', item.id)}>×</button>
+                                        <label>Upload Image</label>
+                                        <div className="file-upload-wrapper">
+                                            <label htmlFor={`graphic-upload-${item.id}`} className="file-upload-btn">Choose Image</label>
+                                            <input id={`graphic-upload-${item.id}`} type="file" accept="image/*" onChange={(e) => handleFileChange('design', index, e.target.files[0])} />
+                                            <span className="file-name">{item.fileName || 'No file chosen'}</span>
+                                        </div>
+                                        {item.url && <PortfolioItemPreview url={item.url} type={item.type} />}
+                                        <label>Description</label>
+                                        <input className="admin-input" type="text" value={item.desc} onChange={(e) => handlePortfolioChange('design', index, 'desc', e.target.value)} />
+                                        <label>Aspect Ratio</label>
+                                        <select className="admin-select" value={item.aspectRatio} onChange={(e) => handlePortfolioChange('design', index, 'aspectRatio', e.target.value)}>
+                                            <option value="16:9">16:9</option><option value="9:16">9:16</option><option value="1:1">1:1</option><option value="3:4">3:4</option>
+                                        </select>
+                                        <label>Width (Grid Columns)</label>
+                                        <select className="admin-select" value={item.gridColumnSpan || 1} onChange={(e) => handlePortfolioChange('design', index, 'gridColumnSpan', parseInt(e.target.value, 10))}>
+                                            <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+                                        </select>
+                                        <label>Image Fit</label>
+                                        <select className="admin-select" value={item.objectFit || 'cover'} onChange={(e) => handlePortfolioChange('design', index, 'objectFit', e.target.value)}>
+                                            <option value="cover">Cover</option><option value="contain">Contain</option>
+                                        </select>
+                                    </div>
+                                ))}
+                                <button className="btn admin-add-btn" onClick={() => handleAddPortfolioItem('design')}>Add Graphic</button>
+                            </div>
+
+                            <div style={{ border: '1px solid #eee', padding: '1.5rem', borderRadius: 'var(--radius)' }}>
+                                <h4>Videos</h4>
+                                {content.portfolio.videos.map((item, index) => (
+                                    <div key={item.id} className="admin-card">
+                                        <button className="delete-btn" onClick={() => handleDeletePortfolioItem('videos', item.id)}>×</button>
+                                        <label>Upload Video</label>
+                                        <div className="file-upload-wrapper">
+                                            <label htmlFor={`video-upload-${item.id}`} className="file-upload-btn">Choose Video</label>
+                                            <input id={`video-upload-${item.id}`} type="file" accept="video/*" onChange={(e) => handleFileChange('videos', index, e.target.files[0])} />
+                                            <span className="file-name">{item.fileName || 'No file chosen'}</span>
+                                        </div>
+                                        {item.url && <PortfolioItemPreview url={item.url} type={item.type} />}
+                                        <label>Description</label>
+                                        <input className="admin-input" type="text" value={item.desc} onChange={(e) => handlePortfolioChange('videos', index, 'desc', e.target.value)} />
+                                        <label>Aspect Ratio</label>
+                                        <select className="admin-select" value={item.aspectRatio} onChange={(e) => handlePortfolioChange('videos', index, 'aspectRatio', e.target.value)}>
+                                            <option value="16:9">16:9</option><option value="9:16">9:16</option><option value="1:1">1:1</option><option value="3:4">3:4</option>
+                                        </select>
+                                        <label>Width (Grid Columns)</label>
+                                        <select className="admin-select" value={item.gridColumnSpan || 1} onChange={(e) => handlePortfolioChange('videos', index, 'gridColumnSpan', parseInt(e.target.value, 10))}>
+                                            <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+                                        </select>
+                                        <label>Video Fit</label>
+                                         <select className="admin-select" value={item.objectFit || 'cover'} onChange={(e) => handlePortfolioChange('videos', index, 'objectFit', e.target.value)}>
+                                            <option value="cover">Cover</option><option value="contain">Contain</option>
+                                        </select>
+                                    </div>
+                                ))}
+                                <button className="btn admin-add-btn" onClick={() => handleAddPortfolioItem('videos')}>Add Video</button>
+                            </div>
+                        </div>
+                    )}
+                    
+                    {activeSection === 'pricing' && (
+                        <>
+                        <div className="admin-section">
+                            <h3>Pricing Plans</h3>
+                            {content.pricing.plans.map((plan, index) => (
+                                 <div key={plan.id} className="admin-card">
+                                    <button className="delete-btn" onClick={() => handleDeletePricingItem('plans', plan.id)}>×</button>
+                                    <label>Plan Name</label>
+                                    <input className="admin-input" type="text" value={plan.name} onChange={(e) => handlePricingChange('plans', index, 'name', e.target.value)} />
+                                    <label>Price</label>
+                                    <input className="admin-input" type="text" value={plan.price} onChange={(e) => handlePricingChange('plans', index, 'price', e.target.value)} />
+                                    <label>Discount</label>
+                                    <input className="admin-input" type="text" value={plan.discount} onChange={(e) => handlePricingChange('plans', index, 'discount', e.target.value)} />
+                                    <label>Details</label>
+                                    <textarea className="admin-textarea" value={plan.details} onChange={(e) => handlePricingChange('plans', index, 'details', e.target.value)}></textarea>
+                                    <label>Link URL</label>
+                                    <input className="admin-input" type="text" value={plan.link || ''} onChange={(e) => handlePricingChange('plans', index, 'link', e.target.value)} />
+                                </div>
+                            ))}
+                            <button className="btn admin-add-btn" onClick={() => handleAddPricingItem('plans')}>Add Plan</button>
+                        </div>
+
+                         <div className="admin-section">
+                            <h3>Individual Service Prices</h3>
+                            {content.pricing.services.map((service, index) => (
+                                 <div key={service.id} className="admin-card">
+                                     <button className="delete-btn" onClick={() => handleDeletePricingItem('services', service.id)}>×</button>
+                                    <label>Service Name</label>
+                                    <input className="admin-input" type="text" value={service.name} onChange={(e) => handlePricingChange('services', index, 'name', e.target.value)} />
+                                    <label>Price</label>
+                                    <input className="admin-input" type="text" value={service.price} onChange={(e) => handlePricingChange('services', index, 'price', e.target.value)} />
+                                    <label>Discount</label>
+                                    <input className="admin-input" type="text" value={service.discount} onChange={(e) => handlePricingChange('services', index, 'discount', e.target.value)} />
+                                    <label>Details</label>
+                                    <textarea className="admin-textarea" value={service.details} onChange={(e) => handlePricingChange('services', index, 'details', e.target.value)}></textarea>
+                                    <label>Link URL</label>
+                                    <input className="admin-input" type="text" value={service.link || ''} onChange={(e) => handlePricingChange('services', index, 'link', e.target.value)} />
+                                </div>
+                            ))}
+                             <button className="btn admin-add-btn" onClick={() => handleAddPricingItem('services')}>Add Service</button>
+                        </div>
+                        </>
+                    )}
+
+                </main>
+            </div>
+        </div>
+    );
+};
+
+const Admin = () => {
+    const [session, setSession] = React.useState(validateSession());
+    const [content, setContent] = React.useState(loadContent());
+    
+    React.useEffect(() => {
+        initDB();
+    }, []);
+
+    return session ? <AdminDashboard session={session} setSession={setSession} /> : <Login setSession={setSession} users={content.users} />;
+};
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<Admin />);
+    </script>
+</body>
+</html>

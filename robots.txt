@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /
+
+# Disallow admin panel and config files
+Disallow: /wxwee21c3c34f43fwe12/
+Disallow: /config/
+
+# Sitemap location
+Sitemap: https://your-domain.com/sitemap.xml
+
+# Crawl delay (optional)
+Crawl-delay: 1
